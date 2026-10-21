@@ -36,6 +36,7 @@ jobs:
           cp index.html www/index.html
           npm init -y
           npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+
           cat > capacitor.config.json <<'EOF'
           {
             "appId": "com.abusaeed.water",
@@ -43,8 +44,119 @@ jobs:
             "webDir": "www"
           }
           EOF
+
           npx cap add android
           npx cap sync android
+
+          cat > android/app/src/main/java/com/abusaeed/water/MainActivity.java <<'EOF'
+          package com.abusaeed.water;
+
+          import android.content.ContentValues;
+          import android.content.Context;
+          import android.net.Uri;
+          import android.os.Build;
+          import android.os.Bundle;
+          import android.os.Environment;
+          import android.provider.MediaStore;
+          import android.print.PrintManager;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.WebView;
+          import android.widget.Toast;
+          import com.getcapacitor.BridgeActivity;
+          import java.io.File;
+          import java.io.FileOutputStream;
+          import java.io.OutputStream;
+
+          public class MainActivity extends BridgeActivity {
+            @Override
+            public void onCreate(Bundle savedInstanceState) {
+              super.onCreate(savedInstanceState);
+              getBridge().getWebView().addJavascriptInterface(
+                new AndroidAppBridge(this, getBridge().getWebView()),
+                "AndroidApp"
+              );
+            }
+
+            public static class AndroidAppBridge {
+              private final MainActivity activity;
+              private final WebView webView;
+
+              AndroidAppBridge(MainActivity activity, WebView webView) {
+                this.activity = activity;
+                this.webView = webView;
+              }
+
+              @JavascriptInterface
+              public void printCurrentPage(String title) {
+                activity.runOnUiThread(() -> {
+                  try {
+                    PrintManager manager = (PrintManager)
+                      activity.getSystemService(Context.PRINT_SERVICE);
+                    String job = (title == null || title.trim().isEmpty())
+                      ? "AbuSaeed" : title;
+                    manager.print(
+                      job,
+                      webView.createPrintDocumentAdapter(job),
+                      null
+                    );
+                  } catch (Exception e) {
+                    Toast.makeText(activity,
+                      "تعذرت الطباعة: " + e.getMessage(),
+                      Toast.LENGTH_LONG).show();
+                  }
+                });
+              }
+
+              @JavascriptInterface
+              public void saveBase64(String name, String mime, String encoded) {
+                activity.runOnUiThread(() -> {
+                  try {
+                    String safeName = (name == null || name.trim().isEmpty())
+                      ? "AbuSaeed-file"
+                      : name.replaceAll("[^\\p{L}\\p{N}._-]", "_");
+                    String safeMime = (mime == null || mime.trim().isEmpty())
+                      ? "application/octet-stream" : mime;
+                    byte[] bytes = android.util.Base64.decode(
+                      encoded, android.util.Base64.DEFAULT
+                    );
+
+                    OutputStream out;
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                      ContentValues values = new ContentValues();
+                      values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                      values.put(MediaStore.Downloads.MIME_TYPE, safeMime);
+                      values.put(MediaStore.Downloads.RELATIVE_PATH,
+                        Environment.DIRECTORY_DOWNLOADS);
+
+                      Uri uri = activity.getContentResolver().insert(
+                        MediaStore.Downloads.EXTERNAL_CONTENT_URI, values
+                      );
+                      if (uri == null) throw new Exception("تعذر إنشاء الملف");
+                      out = activity.getContentResolver().openOutputStream(uri);
+                      if (out == null) throw new Exception("تعذر فتح الملف");
+                    } else {
+                      File dir = activity.getExternalFilesDir(
+                        Environment.DIRECTORY_DOWNLOADS
+                      );
+                      if (dir == null) throw new Exception("مجلد الحفظ غير متاح");
+                      out = new FileOutputStream(new File(dir, safeName));
+                    }
+
+                    out.write(bytes);
+                    out.close();
+                    Toast.makeText(activity,
+                      "تم حفظ الملف: " + safeName,
+                      Toast.LENGTH_LONG).show();
+                  } catch (Exception e) {
+                    Toast.makeText(activity,
+                      "تعذر حفظ الملف: " + e.getMessage(),
+                      Toast.LENGTH_LONG).show();
+                  }
+                });
+              }
+            }
+          }
+          EOF
 
       - name: Build APK
         run: |
