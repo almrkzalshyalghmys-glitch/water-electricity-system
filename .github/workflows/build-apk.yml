@@ -92,21 +92,25 @@ jobs:
               @JavascriptInterface
               public void printCurrentPage(String title) {
                 activity.runOnUiThread(() -> {
-                  try {
-                    PrintManager manager = (PrintManager)
-                      activity.getSystemService(Context.PRINT_SERVICE);
-                    String job = (title == null || title.trim().isEmpty())
-                      ? "AbuSaeed" : title;
-                    manager.print(
-                      job,
-                      webView.createPrintDocumentAdapter(job),
-                      null
-                    );
-                  } catch (Exception e) {
-                    Toast.makeText(activity,
-                      "تعذرت الطباعة: " + e.getMessage(),
-                      Toast.LENGTH_LONG).show();
-                  }
+                  // Let WebView finish applying the dedicated print view and layout first.
+                  webView.postDelayed(() -> {
+                    try {
+                      PrintManager manager = (PrintManager)
+                        activity.getSystemService(Context.PRINT_SERVICE);
+                      if (manager == null) throw new Exception("خدمة الطباعة غير متاحة");
+                      String job = (title == null || title.trim().isEmpty())
+                        ? "AbuSaeed" : title;
+                      manager.print(
+                        job,
+                        webView.createPrintDocumentAdapter(job),
+                        null
+                      );
+                    } catch (Exception e) {
+                      Toast.makeText(activity,
+                        "تعذرت الطباعة: " + e.getMessage(),
+                        Toast.LENGTH_LONG).show();
+                    }
+                  }, 350);
                 });
               }
 
@@ -173,3 +177,4 @@ jobs:
           name: AbuSaeed-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+￼Enter
