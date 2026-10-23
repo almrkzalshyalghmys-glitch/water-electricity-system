@@ -1,4 +1,3 @@
-
 name: Build AbuSaeed Android APK
 
 on:
@@ -71,10 +70,14 @@ jobs:
             @Override
             public void onCreate(Bundle savedInstanceState) {
               super.onCreate(savedInstanceState);
-              getBridge().getWebView().addJavascriptInterface(
-                new AndroidAppBridge(this, getBridge().getWebView()),
+              WebView webView = getBridge().getWebView();
+              webView.addJavascriptInterface(
+                new AndroidAppBridge(this, webView),
                 "AndroidApp"
               );
+              // The page may already have started loading before the JS bridge was added.
+              // Reload once so AndroidApp is available to the page's JavaScript.
+              webView.post(() -> webView.reload());
             }
 
             public static class AndroidAppBridge {
